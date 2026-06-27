@@ -109,3 +109,17 @@ class ReActAgent:
     def _parse_tool_call(action: str) -> tuple[str | None, str | None]:
         m = re.match(r"(\w+)\[(.*)\]", action, re.DOTALL)
         return (m.group(1), m.group(2)) if m else (None, None)
+
+
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    from hello_agents_llm import HelloAgentsLLM
+    from tool_executor import ToolExecutor, search, calculator
+
+    llm = HelloAgentsLLM()
+    tools = ToolExecutor()
+    tools.register_tool("Search", "Search the web via Google", search)
+    tools.register_tool("Calculator", "Evaluate a math expression", calculator)
+
+    agent = ReActAgent(llm, tools, max_steps=5)
+    agent.run("What are Huawei's latest phones? List their key selling points.")

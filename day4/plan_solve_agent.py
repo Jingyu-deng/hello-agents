@@ -74,3 +74,14 @@ class PlanAndSolveAgent:
 
         print(f"\n🎉 Done!")
         return result
+
+
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    from hello_agents_llm import HelloAgentsLLM
+
+    agent = PlanAndSolveAgent(HelloAgentsLLM())
+    agent.run(
+        "A fruit stand sold 15 apples on Monday. Tuesday's sales were double Monday's. "
+        "Wednesday sold 5 fewer than Tuesday. How many apples were sold in total over the three days?"
+    )

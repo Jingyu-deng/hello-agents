@@ -101,3 +101,13 @@ class ReflectionAgent:
 
         print(f"\n{'─' * 40}\n🎉 Reflection complete!")
         return code
+
+
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    from hello_agents_llm import HelloAgentsLLM
+
+    agent = ReflectionAgent(HelloAgentsLLM(), max_iterations=2)
+    result = agent.run("Write a Python function to find all prime numbers from 1 to n.")
+    if result:
+        print(f"\n{'─' * 40}\n📄 Final Output:\n{result}")
