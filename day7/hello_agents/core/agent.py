@@ -40,7 +40,7 @@ class Agent(ABC):
         self.name = name
         self.llm = llm
         self.system_prompt = system_prompt
-        self.config = config or Config()
+        self.config = config or Config.from_env()
         self._history: list[Message] = []
 
         # If a system prompt is provided, seed history with it

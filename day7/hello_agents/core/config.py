@@ -1,61 +1,65 @@
 """
-Config — centralized configuration with environment-variable fallback.
+Configuration management — centralised settings with env-var loading.
 
-All agents and the LLM client share one Config instance (or a subclass),
-avoiding scattered os.getenv() calls.
+Uses Pydantic for validation and follows the pattern from the teaching
+material: sensible defaults on the model, explicit from_env() factory
+for environment overrides, and to_dict() for serialisation.
 """
 
 import os
-from dataclasses import dataclass, field
+from pydantic import BaseModel
 
 
-@dataclass
-class Config:
-    """Framework-wide settings.  Every field can be overridden via constructor
-    or falls back to an environment variable."""
+class Config(BaseModel):
+    """HelloAgents configuration class.
 
-    # ---- LLM settings ----
-    model: str | None = None
-    api_key: str | None = None
-    base_url: str | None = None
-    timeout: int = 60
+    All fields have sensible defaults.  Call Config.from_env() to
+    override defaults from environment variables.
+    """
+
+    # ---- LLM configuration ----
+    model: str = "deepseek-chat"
+    api_key: str = ""
+    base_url: str = "https://api.deepseek.com/v1"
+    provider: str = "auto"
     temperature: float = 0.0
+    timeout: int = 60
 
-    # ---- Agent settings ----
+    # ---- Agent configuration ----
     max_steps: int = 5
     max_iterations: int = 3
 
-    # ---- Provider detection ----
-    provider: str = "auto"
+    # ---- System configuration ----
+    debug: bool = False
+    log_level: str = "INFO"
 
-    def __post_init__(self):
-        """Fill any None fields from environment variables."""
-        self.model = self.model or os.getenv("LLM_MODEL_ID") or os.getenv("MODEL_ID")
-        self.api_key = self.api_key or os.getenv("LLM_API_KEY") or os.getenv("API_KEY")
-        self.base_url = self.base_url or os.getenv("LLM_BASE_URL") or os.getenv("BASE_URL")
-        self.provider = self.provider or os.getenv("LLM_PROVIDER", "auto")
+    # ------------------------------------------------------------------
+    # Factory methods
+    # ------------------------------------------------------------------
 
-        # Numeric env vars
-        for attr, env_name in [
-            ("timeout", "LLM_TIMEOUT"),
-            ("temperature", "LLM_TEMPERATURE"),
-            ("max_steps", "AGENT_MAX_STEPS"),
-            ("max_iterations", "AGENT_MAX_ITERATIONS"),
-        ]:
-            val = os.getenv(env_name)
-            if val is not None:
-                try:
-                    setattr(self, attr, type(getattr(self, attr))(val))
-                except (ValueError, TypeError):
-                    pass
+    @classmethod
+    def from_env(cls) -> "Config":
+        """Create a Config instance, overriding defaults from environment variables."""
+        return cls(
+            # LLM settings
+            model=os.getenv("LLM_MODEL_ID", cls.model_fields["model"].default),
+            api_key=os.getenv("LLM_API_KEY", os.getenv("API_KEY", cls.model_fields["api_key"].default)),
+            base_url=os.getenv("LLM_BASE_URL", os.getenv("BASE_URL", cls.model_fields["base_url"].default)),
+            provider=os.getenv("LLM_PROVIDER", cls.model_fields["provider"].default),
+            temperature=float(os.getenv("LLM_TEMPERATURE", cls.model_fields["temperature"].default)),
+            timeout=int(os.getenv("LLM_TIMEOUT", cls.model_fields["timeout"].default)),
+            # Agent settings
+            max_steps=int(os.getenv("AGENT_MAX_STEPS", cls.model_fields["max_steps"].default)),
+            max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", cls.model_fields["max_iterations"].default)),
+            # System
+            debug=os.getenv("DEBUG", "false").lower() == "true",
+            log_level=os.getenv("LOG_LEVEL", cls.model_fields["log_level"].default),
+        )
 
-    def validate(self) -> list[str]:
-        """Return a list of missing required fields (empty = valid)."""
-        missing = []
-        if not self.model:
-            missing.append("model (LLM_MODEL_ID)")
-        if not self.api_key:
-            missing.append("api_key (LLM_API_KEY)")
-        if not self.base_url:
-            missing.append("base_url (LLM_BASE_URL)")
-        return missing
+    # ------------------------------------------------------------------
+    # Serialisation
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict:
+        """Convert configuration to a plain dictionary."""
+        return self.model_dump()

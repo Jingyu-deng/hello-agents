@@ -54,7 +54,7 @@ class HelloAgentsLLM:
         timeout: int | None = None,
     ):
         # Merge config if provided
-        cfg = config or Config()
+        cfg = config or Config.from_env()
 
         self.model = model or cfg.model
         self.api_key = api_key or cfg.api_key
