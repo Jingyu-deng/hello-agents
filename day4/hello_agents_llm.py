@@ -8,8 +8,13 @@ Improvements over day1's OpenAICompatibleClient:
 """
 
 import os
+import sys
 from openai import OpenAI
 from dotenv import load_dotenv
+
+# Fix UnicodeEncodeError on Windows GBK terminals
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 load_dotenv()
 
@@ -35,7 +40,7 @@ class HelloAgentsLLM:
 
     def think(self, messages: list[dict], temperature: float = 0) -> str:
         """Call the LLM and stream the response token by token."""
-        print(f"🧠 Calling {self.model}...")
+        print(f"[LLM] Calling {self.model}...")
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -43,7 +48,7 @@ class HelloAgentsLLM:
                 temperature=temperature,
                 stream=True,
             )
-            print("✅ ", end="", flush=True)
+            print("", end="", flush=True)
             collected = []
             for chunk in response:
                 content = chunk.choices[0].delta.content or ""
@@ -52,5 +57,5 @@ class HelloAgentsLLM:
             print()
             return "".join(collected)
         except Exception as e:
-            print(f"\n❌ LLM error: {e}")
+            print(f"\n[FAIL] LLM error: {e}")
             return ""

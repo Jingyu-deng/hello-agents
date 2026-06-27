@@ -49,30 +49,30 @@ class PlanAndSolveAgent:
     def run(self, question: str) -> str | None:
         # ---- Phase 1: Plan ----
         print(f"\n{'─' * 40}")
-        print("📋 PHASE 1 — Planning")
+        print("[Phase 1] PLAN — Planning")
         print(f"{'─' * 40}")
 
         plan = self.llm.think([
             {"role": "user", "content": PLAN_PROMPT.format(question=question)}
         ])
         if not plan:
-            print("❌ Planning failed.")
+            print("[FAIL] Planning failed.")
             return None
-        print(f"\n📋 Plan:\n{plan}")
+        print(f"\n[Plan]\n{plan}")
 
         # ---- Phase 2: Solve ----
         print(f"\n{'─' * 40}")
-        print("⚙️  PHASE 2 — Solving")
+        print("[Phase 2] SOLVE — Solving")
         print(f"{'─' * 40}")
 
         result = self.llm.think([
             {"role": "user", "content": SOLVE_PROMPT.format(question=question, plan=plan)}
         ])
         if not result:
-            print("❌ Solving failed.")
+            print("[FAIL] Solving failed.")
             return None
 
-        print(f"\n🎉 Done!")
+        print(f"\n[Done]")
         return result
 
 

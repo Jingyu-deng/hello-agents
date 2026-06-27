@@ -59,7 +59,7 @@ class ReActAgent:
 
             response = self.llm.think([{"role": "user", "content": prompt}])
             if not response:
-                print("❌ LLM returned empty response.")
+                print("[FAIL] LLM returned empty response.")
                 return None
 
             # ---- Parse Thought and Action ----
@@ -67,10 +67,10 @@ class ReActAgent:
             action = self._extract(response, r"Action:\s*(.*?)$")
 
             if thought:
-                print(f"💭 Thought: {thought}")
+                print(f"[Thought] {thought}")
 
             if not action:
-                print("⚠️  No Action found. Stopping.")
+                print("[WARN] No Action found. Stopping.")
                 return None
 
             # ---- Finish? ----
@@ -78,7 +78,7 @@ class ReActAgent:
                 match = re.match(r"Finish\[(.*)\]", action, re.DOTALL)
                 if match:
                     answer = match.group(1).strip()
-                    print(f"🎉 Final Answer: {answer}")
+                    print(f"[Answer] {answer}")
                     return answer
 
             # ---- Execute tool ----
@@ -88,16 +88,16 @@ class ReActAgent:
             else:
                 fn = self.tools.get_tool(tool_name)
                 if fn:
-                    print(f"🎬 Calling: {tool_name}[{tool_input}]")
+                    print(f"[Call] {tool_name}[{tool_input}]")
                     obs = fn(tool_input)
                 else:
                     obs = f"Tool '{tool_name}' not found. Available: {list(self.tools.tools.keys())}"
 
-            print(f"👀 Observation: {obs}")
+            print(f"[Obs] {obs}")
             self.history.append(f"Action: {action}")
             self.history.append(f"Observation: {obs}")
 
-        print("⚠️  Max steps reached.")
+        print("[WARN] Max steps reached.")
         return None
 
     @staticmethod
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     llm = HelloAgentsLLM()
     tools = ToolExecutor()
-    tools.register_tool("Search", "Search the web via Google", search)
+    tools.register_tool("Search", "Search the web for information", search)
     tools.register_tool("Calculator", "Evaluate a math expression", calculator)
 
     agent = ReActAgent(llm, tools, max_steps=5)

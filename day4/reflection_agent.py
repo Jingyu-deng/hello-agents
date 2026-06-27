@@ -65,10 +65,10 @@ class ReflectionAgent:
 
     def run(self, task: str) -> str | None:
         print(f"\n{'─' * 40}")
-        print(f"🔄 REFLECTION — Task: {task}")
+        print(f"[Reflection] Task: {task}")
 
         # ---- Initial attempt ----
-        print(f"\n{'─' * 40}\n📝 Round 1 — Initial Attempt")
+        print(f"\n{'─' * 40}\n[Execute] Round 1 — Initial Attempt")
         code = self.llm.think([
             {"role": "user", "content": EXECUTE_PROMPT.format(task=task)}
         ])
@@ -77,7 +77,7 @@ class ReflectionAgent:
 
         # ---- Reflect → Refine loop ----
         for i in range(1, self.max_iterations + 1):
-            print(f"\n{'─' * 40}\n🔍 Round {i} — Review")
+            print(f"\n{'─' * 40}\n[Review] Round {i} — Review")
             feedback = self.llm.think([
                 {"role": "user", "content": REFLECT_PROMPT.format(task=task, code=code)}
             ])
@@ -86,11 +86,11 @@ class ReflectionAgent:
 
             # Stop if critic is satisfied
             if "NO_IMPROVEMENT_NEEDED" in feedback:
-                print("\n✅ Reviewer satisfied — no further improvements needed.")
+                print("\n[OK] Reviewer satisfied — no further improvements needed.")
                 break
 
             # Extract the "what to improve" from feedback
-            print(f"\n{'─' * 40}\n🔧 Round {i} — Refine")
+            print(f"\n{'─' * 40}\n[Refine] Round {i} — Refine")
             code = self.llm.think([
                 {"role": "user", "content": REFINE_PROMPT.format(
                     task=task, code=code, feedback=feedback
@@ -99,7 +99,7 @@ class ReflectionAgent:
             if not code:
                 return None
 
-        print(f"\n{'─' * 40}\n🎉 Reflection complete!")
+        print(f"\n{'─' * 40}\n[Done] Reflection complete!")
         return code
 
 
@@ -110,4 +110,4 @@ if __name__ == "__main__":
     agent = ReflectionAgent(HelloAgentsLLM(), max_iterations=2)
     result = agent.run("Write a Python function to find all prime numbers from 1 to n.")
     if result:
-        print(f"\n{'─' * 40}\n📄 Final Output:\n{result}")
+        print(f"\n{'─' * 40}\n[Final Output]\n{result}")

@@ -38,13 +38,13 @@ source .venv/Scripts/activate       # Git Bash
 # Install deps (one-time, covers both day1 and day4)
 pip install -r day1/requirements.txt
 
-# Copy your .env from day1
-cp day1/.env day4/.env
+# Copy .env.example and fill in your keys
+cp .env.example .env
 ```
 
 ## Run
 
-Each paradigm runs independently — no main.py needed:
+Each paradigm runs independently:
 
 ```bash
 cd day4
@@ -53,16 +53,24 @@ python plan_solve_agent.py   # Plan-and-Solve: plan first, then solve
 python reflection_agent.py   # Reflection: Execute → Critique → Refine
 ```
 
-## Tools — Simulated, No Extra API Keys
+## Tools
 
-The `search()` and `calculator()` tools in [tool_executor.py](tool_executor.py) are **simulated** — no SerpAPI or Tavily key needed. The original doc uses real APIs, but this repo replaces them with pre-canned results so you can focus on learning the agent paradigms themselves.
+| Tool | Function | Requires |
+|------|----------|----------|
+| `search()` | Simulated search with pre-canned results | Nothing |
+| `serpapi_search()` | Real Google search via [SerpAPI](https://serpapi.com) | `SERPAPI_API_KEY` in `.env` |
+| `calculator()` | Safe expression evaluator | Nothing |
 
-To swap in a real search (e.g., Tavily from day1), just register it in the `if __name__ == "__main__"` block:
+The simulated `search()` keeps the demo self-contained. For real web search, switch to `serpapi_search` in the `if __name__ == "__main__"` block:
 
 ```python
-# Replace simulated search with real Tavily:
-from day1.agent import get_attraction  # or write a real search wrapper
-tools.register_tool("Search", "Search the web", real_search_function)
+# Use real SerpAPI search:
+from tool_executor import serpapi_search
+tools.register_tool("Search", "Search the web via Google", serpapi_search)
+
+# Or use simulated search (no API key needed):
+from tool_executor import search
+tools.register_tool("Search", "Search the web for information", search)
 ```
 
 ## Paradigm Comparison
@@ -92,42 +100,80 @@ ReAct:                  Plan-and-Solve:         Reflection:
 
 ### ReAct
 ```
---- ReAct Step 1 ---
-💭 Thought: To answer about Huawei's latest phones, I need to search.
-Action: Search[What are Huawei's latest phones?]
-🔍 Searching: What are Huawei's latest phones?
-👀 Observation: [1] HUAWEI Mate 70 Pro — Kirin 9100 chip...
-                 [2] HUAWEI Pura 80 Pro+ — First retractable camera...
+Tool 'Search' registered.
+Tool 'Calculator' registered.
 
+────────────────────────────────────────
+--- ReAct Step 1 ---
+[LLM] Calling deepseek-chat...
+[Thought] I need to find the latest Huawei phones and their key selling
+  points. I'll search the web for this information.
+Action: Search[Huawei latest phones 2025 key selling points]
+[Call] Search[Huawei latest phones 2025 key selling points]
+Searching: Huawei latest phones 2025 key selling points
+[Obs] [1] HUAWEI Mate 70 Pro — Kirin 9100 chip, satellite
+       communication 2.0, XMAGE imaging upgrade, Kunlun glass.
+       [2] HUAWEI Pura 80 Pro+ — First retractable camera,
+       variable aperture, ultra-light-gathering night vision
+       telephoto, HarmonyOS 4.2.
+
+────────────────────────────────────────
 --- ReAct Step 2 ---
-💭 Thought: I now have the search results. Let me summarize.
-Action: Finish[Huawei's latest phones: Mate 70 Pro (Kirin 9100...) and Pura 80 Pro+ (...)]
-🎉 Final Answer: ...
+[LLM] Calling deepseek-chat...
+[Thought] The search results provide information on two of Huawei's
+  latest phones. I can now compile the final answer.
+Action: Finish[Huawei's Latest Phones:
+  1. HUAWEI Mate 70 Pro — Kirin 9100 chip, Satellite communication 2.0,
+     XMAGE imaging upgrade, Kunlun glass.
+  2. HUAWEI Pura 80 Pro+ — First retractable camera, Variable aperture,
+     Ultra-light-gathering night vision telephoto, HarmonyOS 4.2.]
+[Answer] ...
 ```
 
 ### Plan-and-Solve
 ```
-📋 PHASE 1 — Planning
-✅ 1. Monday: 15 apples
-   2. Tuesday: 15 × 2 = 30 apples
-   3. Wednesday: 30 - 5 = 25 apples
-   4. Sum: 15 + 30 + 25 = 70 apples
+[Phase 1] PLAN — Planning
+[LLM] Calling deepseek-chat...
+1. Identify Monday's sales. → Monday = 15 apples.
+2. Calculate Tuesday's sales. → 15 × 2 = 30 apples.
+3. Calculate Wednesday's sales. → 30 - 5 = 25 apples.
+4. Calculate total. → 15 + 30 + 25 = 70 apples.
 
-⚙️  PHASE 2 — Solving
-✅ Step 1: 15 | Step 2: 30 | Step 3: 25 | FINAL ANSWER: 70 apples
+[Phase 2] SOLVE — Solving
+[LLM] Calling deepseek-chat...
+Step 1: Monday's sales = 15 apples.
+Step 2: Tuesday's sales = 15 × 2 = 30 apples.
+Step 3: Wednesday's sales = 30 - 5 = 25 apples.
+Step 4: Total = 15 + 30 + 25 = 70 apples.
+
+FINAL ANSWER: 70
 ```
 
 ### Reflection
 ```
-📝 Round 1 — Initial Attempt
-✅ def find_primes(n): ...  # O(n√n) trial division
+[Reflection] Task: Write a Python function to find all prime numbers
+  from 1 to n.
 
-🔍 Round 1 — Review
-✅ Issues: O(n√n) is suboptimal. Recommend Sieve of Eratosthenes.
+[Execute] Round 1 — Initial Attempt
+[LLM] Calling deepseek-chat...
+def find_primes_up_to(n):  # Sieve of Eratosthenes
+    is_prime = [True] * (n + 1)
+    p = 2
+    while p * p <= n:
+        if is_prime[p]:
+            for i in range(p * p, n + 1, p):
+                is_prime[i] = False
+        p += 1
+    return [i for i in range(2, n + 1) if is_prime[i]]
 
-🔧 Round 1 — Refine
-✅ def find_primes(n): ...  # O(n log log n) sieve
+[Review] Round 1 — Review
+[LLM] Calling deepseek-chat...
+- Correctness: correct, edge cases handled.
+- Efficiency: O(n log log n) — optimal. Minor: skip even numbers
+  after p=2.
+- Readability: clear docstring, comments, well-structured.
 
-🔍 Round 2 — Review
-✅ NO_IMPROVEMENT_NEEDED
+NO_IMPROVEMENT_NEEDED — code is production-quality.
+
+[OK] Reviewer satisfied — no further improvements needed.
 ```
