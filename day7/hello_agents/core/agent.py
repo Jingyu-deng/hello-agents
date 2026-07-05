@@ -78,7 +78,7 @@ class Agent(ABC):
 
     def get_history_as_dicts(self) -> list[dict]:
         """Return history as OpenAI-compatible dicts."""
-        return [m.to_openai() for m in self._history]
+        return [m.to_dict() for m in self._history]
 
     def clear_history(self) -> None:
         """Clear the conversation history (keeps system prompt if present)."""

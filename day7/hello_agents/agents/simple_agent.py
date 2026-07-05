@@ -95,7 +95,7 @@ class SimpleAgent(Agent):
         # History
         for msg in self._history:
             if msg.role != "system":  # already handled above
-                messages.append(msg.to_openai())
+                messages.append(msg.to_dict())
 
         # Current input
         messages.append({"role": "user", "content": input_text})
@@ -199,23 +199,123 @@ class SimpleAgent(Agent):
 
 
 # ---------------------------------------------------------------------------
-# Demo
+# Debug / Demo
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    from hello_agents.core.llm import HelloAgentsLLM
+    """
+    Debug harness for SimpleAgent — exercises both the fast path and the
+    full tool-calling loop.
 
-    llm = HelloAgentsLLM()
-    agent = SimpleAgent(
-        name="Assistant",
-        llm=llm,
-        system_prompt="You are a helpful AI assistant. Answer concisely.",
-    )
-    print("SimpleAgent demo — type 'quit' to exit.\n")
-    while True:
-        user = input("You: ").strip()
-        if user.lower() in ("quit", "exit", "q"):
-            break
-        if not user:
-            continue
-        response = agent.run(user)
-        print(f"\nAssistant: {response}\n")
+    Usage:
+        python -m hello_agents.agents.simple_agent              # tool-loop mode
+        python -m hello_agents.agents.simple_agent fast         # fast-path mode (no tools)
+        python -m hello_agents.agents.simple_agent repl         # interactive REPL
+
+    VS Code breakpoint targets (line numbers):
+        Line 72  — messages built, about to choose fast-path vs tool-loop
+        Line 81  — entering _run_with_tools()
+        Line 128 — LLM invoke inside the loop (hit once per iteration)
+        Line 133 — tool_calls parsed, see what regex found
+        Line 144 — _execute_tool() — step INTO to see tool dispatch
+        Line 157 — exhausted max_iterations, final fallback call
+    """
+    import sys
+
+    def _create_tools() -> ToolRegistry:
+        """Register demo tools to trigger the tool-calling loop."""
+        registry = ToolRegistry()
+
+        def get_weather(city: str) -> str:
+            weather = {
+                "北京": "Beijing: Sunny, 25°C, Humidity 45%, Wind NE 3m/s",
+                "上海": "Shanghai: Cloudy, 28°C, Humidity 70%, Wind SE 5m/s",
+                "成都": "Chengdu: Overcast, 22°C, Humidity 80%, Wind calm",
+            }
+            return weather.get(city, f"{city}: Partly cloudy, 20°C, Humidity 55%")
+
+        def search_attractions(query: str) -> str:
+            attractions = {
+                "北京": "Top attractions in Beijing:\n1. Forbidden City (5A)\n2. Great Wall at Badaling (5A)\n3. Summer Palace (5A)",
+                "上海": "Top attractions in Shanghai:\n1. The Bund\n2. Yu Garden\n3. Shanghai Tower",
+            }
+            for city, result in attractions.items():
+                if city in query:
+                    return result
+            return f"Found 3 attractions matching '{query}'"
+
+        registry.register_function("get_weather", "Get current weather for a city. Input: city name in Chinese.", get_weather)
+        registry.register_function("search_attractions", "Search tourist attractions in a city. Input: city name + keywords.", search_attractions)
+        return registry
+
+    # --- REPL mode ---
+    if len(sys.argv) > 1 and sys.argv[1] == "repl":
+        llm = HelloAgentsLLM()
+        agent = SimpleAgent(
+            name="Assistant",
+            llm=llm,
+            system_prompt="You are a helpful AI assistant. Answer concisely.",
+        )
+        print("SimpleAgent REPL — type 'quit' to exit.\n")
+        while True:
+            user = input("You: ").strip()
+            if user.lower() in ("quit", "exit", "q"):
+                break
+            if not user:
+                continue
+            response = agent.run(user)
+            print(f"\nAssistant: {response}\n")
+
+    # --- Fast-path mode (no tools) ---
+    elif len(sys.argv) > 1 and sys.argv[1] == "fast":
+        print("=" * 60)
+        print("SimpleAgent — FAST PATH (no tools)")
+        print("=" * 60)
+        llm = HelloAgentsLLM()
+        agent = SimpleAgent(
+            name="Bot",
+            llm=llm,
+            system_prompt="You are a helpful assistant. Answer concisely.",
+            enable_tool_calling=False,
+        )
+        print(f"enable_tool_calling = {agent.enable_tool_calling}\n")
+        response = agent.run("What is the capital of France?")
+        print(f"Response: {response}")
+        print(f"History: {len(agent.get_history())} messages")
+        print("Done.")
+
+    # --- Default: tool-calling loop mode ---
+    else:
+        print("=" * 60)
+        print("SimpleAgent — TOOL-CALLING LOOP")
+        print("=" * 60)
+        llm = HelloAgentsLLM()
+        tools = _create_tools()
+        agent = SimpleAgent(
+            name="TravelBot",
+            llm=llm,
+            system_prompt=(
+                "You are a travel assistant. When a user asks about weather or "
+                "attractions, you MUST use the tools to get real data before answering. "
+                "Always call tools with the city name in Chinese."
+            ),
+            tool_registry=tools,
+            enable_tool_calling=True,
+        )
+        print(f"Tools: {tools.tool_names}")
+        print(f"enable_tool_calling = {agent.enable_tool_calling}\n")
+
+        # Test 1: single tool
+        print("--- Test 1: Single tool call ---")
+        response = agent.run("What's the weather like in 北京 today?")
+        print(f"\nAgent:\n{response}\n")
+
+        # Test 2: two tools in one response
+        print("--- Test 2: Multi-tool call ---")
+        response = agent.run("I want to travel to 上海. Tell me the weather and attractions there.")
+        print(f"\nAgent:\n{response}\n")
+
+        print("--- History ---")
+        for i, msg in enumerate(agent.get_history()):
+            content = msg.content[:80].replace("\n", " ")
+            print(f"  [{i}] {msg.role.upper()}: {content}...")
+        print(f"\nDone.")
