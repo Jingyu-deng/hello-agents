@@ -10,3 +10,6 @@ venv/
 # IDE
 .vscode/
 .idea/
+
+# Learning journal (personal, not for repo)
+JOURNEY.md

@@ -1,11 +1,7 @@
 """旅行规划API路由"""
 
 from fastapi import APIRouter, HTTPException
-from ...models.schemas import (
-    TripRequest,
-    TripPlanResponse,
-    ErrorResponse
-)
+from ...models.schemas import TripRequest, TripPlanResponse
 from ...agents.trip_planner_agent import get_trip_planner_agent
 
 router = APIRouter(prefix="/trip", tags=["旅行规划"])
@@ -17,7 +13,7 @@ router = APIRouter(prefix="/trip", tags=["旅行规划"])
     summary="生成旅行计划",
     description="根据用户输入的旅行需求,生成详细的旅行计划"
 )
-async def plan_trip(request: TripRequest):
+def plan_trip(request: TripRequest):
     """
     生成旅行计划
 
@@ -39,7 +35,7 @@ async def plan_trip(request: TripRequest):
         print("🔄 获取多智能体系统实例...")
         agent = get_trip_planner_agent()
 
-        # 生成旅行计划
+        # 生成旅行计划（def route 自动在线程池中执行，不阻塞事件循环）
         print("🚀 开始生成旅行计划...")
         trip_plan = agent.plan_trip(request)
 
@@ -75,8 +71,8 @@ async def health_check():
         return {
             "status": "healthy",
             "service": "trip-planner",
-            "agent_name": agent.agent.name,
-            "tools_count": len(agent.agent.list_tools())
+            "llm_ready": agent.llm is not None,
+            "mcp_ready": agent.amap_tool is not None,
         }
     except Exception as e:
         raise HTTPException(
