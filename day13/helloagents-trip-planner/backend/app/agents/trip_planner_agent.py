@@ -72,6 +72,29 @@ HOTEL_AGENT_PROMPT = """你是酒店推荐专家。你的任务是根据城市�
 3. 关键词使用"酒店"或"宾馆"
 """
 
+CUISINE_AGENT_PROMPT = """你是美食搜索专家。你的任务是根据城市搜索当地的特色美食和推荐餐厅。
+
+**重要提示:**
+你必须使用工具来搜索美食!不要自己编造美食信息!
+
+**工具调用格式:**
+使用maps_text_search工具搜索美食时,必须严格按照以下格式:
+`[TOOL_CALL:amap_maps_text_search:keywords=美食,city=城市名]`
+
+**示例:**
+用户: "搜索北京的特色美食"
+你的回复: [TOOL_CALL:amap_maps_text_search:keywords=特色美食,city=北京]
+
+用户: "上海有什么好吃的"
+你的回复: [TOOL_CALL:amap_maps_text_search:keywords=美食,city=上海]
+
+**注意:**
+1. 必须使用工具,不要直接回答
+2. 格式必须完全正确,包括方括号和冒号
+3. 关键词可使用"美食"、"特色美食"、"小吃"等
+4. 建议搜索多个关键词以获取更全面的美食信息
+"""
+
 PLANNER_AGENT_PROMPT = """你是行程规划专家。你的任务是根据景点信息和天气信息,生成详细的旅行计划。
 
 请严格按照以下JSON格式返回旅行计划:
@@ -209,10 +232,17 @@ class MultiAgentTripPlanner:
             weather_agent.add_tool(self.amap_tool)
             hotel_agent = SimpleAgent(name="酒店推荐专家", llm=self.llm, system_prompt=HOTEL_AGENT_PROMPT)
             hotel_agent.add_tool(self.amap_tool)
+            # 美食Agent仅在用户偏好"美食"时创建
+            cuisine_agent = None
+            if "美食" in (request.preferences or []):
+                cuisine_agent = SimpleAgent(name="美食搜索专家", llm=self.llm, system_prompt=CUISINE_AGENT_PROMPT)
+                cuisine_agent.add_tool(self.amap_tool)
             planner_agent = SimpleAgent(name="行程规划专家", llm=self.llm, system_prompt=PLANNER_AGENT_PROMPT)
 
-            # 步骤1-3: 并行执行 — 三个Agent互不依赖，同时调用
-            print("📍 并行搜索景点、天气、酒店...")
+            # 步骤1-3 (可选步骤1-4): 并行执行 — 各Agent互不依赖，同时调用
+            enable_cuisine = cuisine_agent is not None
+            step_names = "景点、天气、酒店" + ("、美食" if enable_cuisine else "")
+            print(f"📍 并行搜索{step_names}...")
             attraction_query = self._build_attraction_query(request)
             weather_query = f"请查询{request.city}的天气信息"
             hotel_query = f"请搜索{request.city}的{request.accommodation}酒店"
@@ -221,30 +251,36 @@ class MultiAgentTripPlanner:
             from concurrent.futures import ThreadPoolExecutor, as_completed
 
             t_start = time.perf_counter()
-            with ThreadPoolExecutor(max_workers=3) as executor:
+            num_steps = 3 + (1 if enable_cuisine else 0)
+            with ThreadPoolExecutor(max_workers=num_steps) as executor:
                 futures = {
                     executor.submit(attraction_agent.run, attraction_query): "attraction",
                     executor.submit(weather_agent.run, weather_query): "weather",
                     executor.submit(hotel_agent.run, hotel_query): "hotel",
                 }
+                if enable_cuisine:
+                    cuisine_query = self._build_cuisine_query(request)
+                    futures[executor.submit(cuisine_agent.run, cuisine_query)] = "cuisine"
 
                 results = {}
                 for future in as_completed(futures):
                     name = futures[future]
                     results[name] = future.result()
                     elapsed = time.perf_counter() - t_start
-                    print(f"✅ {name} done at {elapsed:.1f}s — {results[name][:80]}...\n")
+                    print(f"✅ {name} done at {elapsed:.1f}s — {results[name][:300]}...\n")
 
             t_total = time.perf_counter() - t_start
-            print(f"⏱️  Parallel steps 1-3 total: {t_total:.1f}s (sequential est: ~{t_total * 3:.0f}s)\n")
+            est = t_total * num_steps
+            print(f"⏱️  Parallel steps 1-{num_steps} total: {t_total:.1f}s (sequential est: ~{est:.0f}s)\n")
 
             attraction_response = results["attraction"]
             weather_response = results["weather"]
             hotel_response = results["hotel"]
+            cuisine_response = results.get("cuisine", "")
 
             # 步骤4: 行程规划Agent整合信息生成计划
             print("📋 步骤4: 生成行程计划...")
-            planner_query = self._build_planner_query(request, attraction_response, weather_response, hotel_response)
+            planner_query = self._build_planner_query(request, attraction_response, weather_response, hotel_response, cuisine_response)
             planner_response = planner_agent.run(planner_query)
             print(f"行程规划结果: {planner_response[:300]}...\n")
 
@@ -276,7 +312,13 @@ class MultiAgentTripPlanner:
         query = f"请使用amap_maps_text_search工具搜索{request.city}的{keywords}相关景点。\n[TOOL_CALL:amap_maps_text_search:keywords={keywords},city={request.city}]"
         return query
 
-    def _build_planner_query(self, request: TripRequest, attractions: str, weather: str, hotels: str = "") -> str:
+    def _build_cuisine_query(self, request: TripRequest) -> str:
+        """构建美食搜索查询 - 直接包含工具调用"""
+        keywords = "美食"
+        query = f"请使用amap_maps_text_search工具搜索{request.city}的{keywords}相关信息,包括特色美食和推荐餐厅。\n[TOOL_CALL:amap_maps_text_search:keywords={keywords},city={request.city}]"
+        return query
+
+    def _build_planner_query(self, request: TripRequest, attractions: str, weather: str, hotels: str = "", cuisine: str = "") -> str:
         """构建行程规划查询"""
         query = f"""请根据以下信息生成{request.city}的{request.travel_days}天旅行计划:
 
@@ -297,6 +339,9 @@ class MultiAgentTripPlanner:
 **酒店信息:**
 {hotels}
 
+**美食信息:**
+{cuisine if cuisine else '暂无美食信息'}
+
 **要求:**
 1. 每天安排2-3个景点
 2. 每天必须包含早中晚三餐
@@ -304,6 +349,7 @@ class MultiAgentTripPlanner:
 3. 考虑景点之间的距离和交通方式
 4. 返回完整的JSON格式数据
 5. 景点的经纬度坐标要真实准确
+6. 如果提供了美食信息,请将推荐餐厅融入每日三餐中
 """
         if request.free_text_input:
             query += f"\n**额外要求:** {request.free_text_input}"
